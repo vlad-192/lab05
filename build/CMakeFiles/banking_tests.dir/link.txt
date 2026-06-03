@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/banking_tests.dir/link.d CMakeFiles/banking_tests.dir/tests/test_banking.cpp.o -o banking_tests  libbanking.a lib/libgtest.a lib/libgtest_main.a lib/libgmock.a -lpthread lib/libgtest.a
