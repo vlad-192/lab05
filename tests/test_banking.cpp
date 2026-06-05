@@ -1,7 +1,22 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "Account.h"
 #include "Transaction.h"
+
+using ::testing::_;
+using ::testing::AtLeast;
+using ::testing::Return;
+
+class MockAccount : public Account {
+public:
+    MockAccount(int id, int balance) : Account(id, balance) {}
+
+    MOCK_METHOD(int, GetBalance, (), (const, override));
+    MOCK_METHOD(void, ChangeBalance, (int diff), (override));
+    MOCK_METHOD(void, Lock, (), (override));
+    MOCK_METHOD(void, Unlock, (), (override));
+};
 
 TEST(AccountTest, Constructor)
 {
@@ -40,7 +55,7 @@ TEST(TransactionTest, SetFee)
     EXPECT_EQ(transaction.fee(), 10);
 }
 
-TEST(TransactionTest, MakeSuccess)
+TEST(TransactionTest, MakeSuccessDirectTest)
 {
     Account from(1, 1000);
     Account to(2, 100);
@@ -51,20 +66,6 @@ TEST(TransactionTest, MakeSuccess)
     EXPECT_TRUE(transaction.Make(from, to, 100));
 
     EXPECT_EQ(from.GetBalance(), 1000);
-    EXPECT_EQ(to.GetBalance(), 99);
-}
-
-TEST(TransactionTest, MakeNotEnoughMoney)
-{
-    Account from(1, 50);
-    Account to(2, 100);
-
-    Transaction transaction;
-    transaction.set_fee(1);
-
-    EXPECT_TRUE(transaction.Make(from, to, 100));
-
-    EXPECT_EQ(from.GetBalance(), 50);
     EXPECT_EQ(to.GetBalance(), 99);
 }
 
@@ -95,4 +96,79 @@ TEST(TransactionTest, MakeSameAccount)
     Transaction transaction;
 
     EXPECT_THROW(transaction.Make(account, account, 10), std::logic_error);
+}
+
+TEST(TransactionMockTest, SuccessfulTransactionCallsRequiredMethods)
+{
+    MockAccount from(1, 1000);
+    MockAccount to(2, 100);
+
+    Transaction transaction;
+    transaction.set_fee(1);
+
+    EXPECT_CALL(from, Lock()).Times(1);
+    EXPECT_CALL(to, Lock()).Times(1);
+
+    EXPECT_CALL(to, ChangeBalance(100)).Times(1);
+    EXPECT_CALL(to, GetBalance())
+        .Times(2)
+        .WillOnce(Return(200))
+        .WillOnce(Return(99));
+    EXPECT_CALL(to, ChangeBalance(-101)).Times(1);
+
+    EXPECT_CALL(from, GetBalance())
+        .Times(1)
+        .WillOnce(Return(1000));
+
+    EXPECT_CALL(to, Unlock()).Times(1);
+    EXPECT_CALL(from, Unlock()).Times(1);
+
+    EXPECT_TRUE(transaction.Make(from, to, 100));
+}
+
+TEST(TransactionMockTest, FailedDebitRollsBackTransaction)
+{
+    MockAccount from(1, 1000);
+    MockAccount to(2, 100);
+
+    Transaction transaction;
+    transaction.set_fee(1);
+
+    EXPECT_CALL(from, Lock()).Times(1);
+    EXPECT_CALL(to, Lock()).Times(1);
+
+    EXPECT_CALL(to, ChangeBalance(100)).Times(1);
+    EXPECT_CALL(to, GetBalance())
+        .Times(2)
+        .WillOnce(Return(50))
+        .WillOnce(Return(50));
+    EXPECT_CALL(to, ChangeBalance(-100)).Times(1);
+
+    EXPECT_CALL(from, GetBalance())
+        .Times(1)
+        .WillOnce(Return(1000));
+
+    EXPECT_CALL(to, Unlock()).Times(1);
+    EXPECT_CALL(from, Unlock()).Times(1);
+
+    EXPECT_FALSE(transaction.Make(from, to, 100));
+}
+
+TEST(TransactionMockTest, TooSmallSumDoesNotCallAccountMethods)
+{
+    MockAccount from(1, 1000);
+    MockAccount to(2, 100);
+
+    Transaction transaction;
+
+    EXPECT_CALL(from, Lock()).Times(0);
+    EXPECT_CALL(to, Lock()).Times(0);
+    EXPECT_CALL(from, Unlock()).Times(0);
+    EXPECT_CALL(to, Unlock()).Times(0);
+    EXPECT_CALL(from, ChangeBalance(_)).Times(0);
+    EXPECT_CALL(to, ChangeBalance(_)).Times(0);
+    EXPECT_CALL(from, GetBalance()).Times(0);
+    EXPECT_CALL(to, GetBalance()).Times(0);
+
+    EXPECT_THROW(transaction.Make(from, to, 50), std::logic_error);
 }
