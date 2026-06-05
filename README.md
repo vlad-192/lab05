@@ -11,8 +11,8 @@ Lotnik Vladislav IU8-23
 
 ## Test Results
 
-- Total tests: 10
-- Passed: 10
+- Total tests: 12
+- Passed: 12
 - Failed: 0
 
 ## Build and Test
